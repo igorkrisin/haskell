@@ -47,8 +47,8 @@ consToStr (Cons xs xy) = (lstToStr xs) ++ (consToStr xy)
 
 lstToStr None = ""
 lstToStr (Cons xs xy) = "("++consToStr(Cons xs xy)++")"
-lstToStr (Num n) = intToStr n ""++" "
-lstToStr (Str s) = s 
+lstToStr (Num n) = (intToStr n "")++" "
+lstToStr (Str s) = s++" "
 
 
 checkAmountParenthesses [] [] = True
@@ -62,6 +62,24 @@ checkAmountParenthesses (")":xs) ("(":st)  = checkAmountParenthesses xs st
 
 --если мы встретили не скобку, то просто пропускаем и продолжаем
 checkAmountParenthesses (x:xs) st  = checkAmountParenthesses xs st
+--если встретил  закрывающую скобочку - скидывай из стека ВСЕ, ДО следующей открывающейся, если открывающуюся - клади на стек, если не скобка -закидывай на стек
+
+--перебираем токены, если встречаем не закрывающую скобку, то кладем ее на стек, если встречаем закрывающую скобку,
+-- то вынимаем со стека все до первой открывающей, формируем из этого новый список, и кладем на стек
+
+
+takeOutUpToFirstOpenParenthesses :: List->List->List
+takeOutUpToFirstOpenParenthesses (Cons  (Str "(") xs) s = Cons  s xs 
+takeOutUpToFirstOpenParenthesses (Cons x xs) s = takeOutUpToFirstOpenParenthesses xs (Cons x s)
+    
+
+parse :: [[Char]]->List->List
+parse [] (Cons x None) = x
+parse (")":xs) stack = parse xs (takeOutUpToFirstOpenParenthesses  stack None)
+parse (x:xs) stack = parse xs (Cons (Str x) stack)
+
+
+--TODO убрать лишний пробел в функции parse
 
 --popElementToOpenParenthesses ["("] = 
 
