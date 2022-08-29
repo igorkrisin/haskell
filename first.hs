@@ -1,4 +1,6 @@
-import Data.ByteString (count)
+import Data.ByteString (count, length, reverse)
+import Distribution.Simple.Utils (xargs)
+import Data.Time.Format.ISO8601 (yearFormat)
 
 maxim :: Ord a => [a] -> a
 maxim [] = error"dffd"
@@ -50,4 +52,27 @@ decrementNum n = decrementNum (n-1)
 fact' 0 = 1
 fact' 1 = 1
 fact' n =  n * fact'(n-1)
+
+lastEl [x] = x
+lastEl (x:xs) = lastEl xs
+
+butLastEl[x, y] = x
+butLastEl (x:xs) = butLastEl xs
+
+
+--countEl xs
+
+
+--elementAt [] y = 0
+elementAt (x:xs) 1 = x
+elementAt (x:xs) y = elementAt xs (y-1)
+
+
+length' []  = 0
+length' (x:xs) = length' xs +1 
+
+reverse'' [] = []
+reverse'' (x:xs) = reverse'' xs++[x]
+
+
 
