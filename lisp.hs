@@ -36,8 +36,8 @@ tokenize xs =   (fst temp):tokenize (snd temp)
     where temp = firstParentToStr xs 
     
     
-data List = Num Int| None | Cons List List|Str [Char]  deriving Show
-data Command = EVAL List|APPLY deriving Show
+data List = Num Int| None | Cons List List|Str [Char]deriving Show
+data Command = EVAL List|APPLY|CONS|PUSH_NONE deriving Show
 
 
 --392 = 3*10^2+9*10^1+2*10^0
@@ -62,6 +62,9 @@ lstToStr (Cons xs xy) = "("++consToStr(Cons xs xy)++")"
 lstToStr (Num n) = (intToStr n "")
 lstToStr (Str s) = s
 
+
+
+
 --TO DO написать функцию преобразования строк в числа
 --Функция проверяет, что все элементы строки - это цифры (Bool)
 --добавить в  parse шаблон, что если на вход поступила строка, которая содержит число - нужно преобразровать ее в число.
@@ -71,7 +74,8 @@ lstToStr (Str s) = s
 lenTostr []  = 0
 lenTostr (x:xs)  = lenTostr xs + 1
 
-
+lenghtList None = 0
+lenghtList (Cons x xs) = lenghtList xs + 1
 
 strToInt [] = 0
 strToInt (x:xs) = strToInt xs + (ord x - 48)*10^lenTostr xs
@@ -104,19 +108,46 @@ takeOutUpToFirstOpenParenthesses (Cons x xs) s = takeOutUpToFirstOpenParenthesse
 
 parse :: [[Char]]->List->List
 parse [] (Cons x None) = x
-parse ((checkIntInStr x):xs) stack = parse xs ((strToInt x):stack)
 parse (")":xs) stack = parse xs (takeOutUpToFirstOpenParenthesses  stack None)
-parse (x:xs) stack = parse xs (Cons (Str x) stack)
+parse (x:xs) stack = if (checkIntInStr x) then parse xs (Cons (Num (strToInt x)) stack) else parse xs (Cons (Str x) stack)
+--parse (x:xs) stack = parse xs (Cons (Str x) stack)
 
 appendToExprWithEval :: List->[Command]
 appendToExprWithEval None = []
 appendToExprWithEval (Cons x xs) =  (EVAL x): appendToExprWithEval xs
 
-eval :: [Command]->List->List
-eval (EVAL (Str s):xs) stack = eval xs (Cons (Str s) stack)
-eval (EVAL (Num x):xs) stack  = trace ("EVAL Num") $  eval xs (Cons (Num x) stack)
-eval (EVAL (Cons x xy):xs ) stack = trace ("EVAL Cons " ++ show ((appendToExprWithEval (Cons x xy))++[APPLY]++xs)) $ eval ((appendToExprWithEval (Cons x xy))++[APPLY]++xs) stack 
-eval (APPLY:y) (Cons (Str "+") (Cons (Num x) (Cons (Num s) xc))) = trace ("APPLY ") $(eval y (Cons (Num(x + s)) xc))
+callEval [] stack = return()
+callEval expr stack = printStr(show temp++"\n")>>callEval(fst temp) (snd temp)
+    where temp = eval expr stack 
+    
+
+doubleElinFunc x 0 = []
+doubleElinFunc x n = x:doubleElinFunc x (n-1)
+
+
+eval :: [Command]->List->([Command], List)
+eval [] stack = ([], stack)
+eval (PUSH_NONE:y) stack = eval y (Cons None stack)
+eval (EVAL (Str s):xs) stack = (xs, (Cons (Str s) stack))
+eval (EVAL (Num x):xs) stack  =  ( xs, (Cons (Num x) stack))
+eval (EVAL (Cons (Str "list") xs):y) stack = eval ((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y) stack
+eval (EVAL (Cons x xy):xs ) stack = (((appendToExprWithEval (Cons x xy))++[APPLY]++xs), stack) 
+eval (APPLY:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) = (y, (Cons (Num(x + s)) xc))
+eval (CONS:y) (Cons x1 (Cons x2 xs)) = eval y  (Cons(Cons x1 x2) xs)
+
+
+
+--TODO переименовать  eval в step 
+-- EVAL (list (+ 1 2) (* 3 4) 3)
+--commands: EVAL (+ 1 2) EVAL (* 3 4) EVAL 3 NONE CONS CONS CONS
+--COMMANDS: PUSH_NONE EVAL (+ 1 2) CONS EVAL (* 3 4) CONS EVAL 3 CONS
+--stack: 3 12 3 None
+--stack: 3 12 (3)
+--stack: 3 (12 3)
+--stack: (3 12 3)  
+
+printStr "" =  return()
+printStr (x:xs) = putChar x >>  printStr xs
 
 -- ((ф и) a)
 --qsort (x:xs) = qsort [y | y <- xs, y <= x] ++ x: qsort [y | y <- xs, y > x]  
@@ -154,3 +185,11 @@ eval (APPLY:y) (Cons (Str "+") (Cons (Num x) (Cons (Num s) xc))) = trace ("APPLY
 --"235"
 
 --"35 85 ()"
+
+
+-- EVAL (list (+ 1 2) (* 3 4) 3)
+--commands: EVAL (+ 1 2) EVAL (* 3 4) EVAL 3 NONE CONS CONS CONS
+--stack: 3 12 3 None
+--stack: 3 12 (3)
+--stack: 3 (12 3)
+--stack: (3 12 3) 
