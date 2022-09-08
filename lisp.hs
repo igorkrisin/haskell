@@ -37,7 +37,7 @@ tokenize xs =   (fst temp):tokenize (snd temp)
     
     
 data List = Num Int| None | Cons List List|Str [Char]deriving Show
-data Command = EVAL List|APPLY|CONS|PUSH_NONE deriving Show
+data Command = EVAL List|APPLY|APPLY1|CONS|PUSH_NONE|SWITCH deriving Show
 
 
 --392 = 3*10^2+9*10^1+2*10^0
@@ -118,26 +118,56 @@ appendToExprWithEval (Cons x xs) =  (EVAL x): appendToExprWithEval xs
 
 callEval [] stack = return()
 callEval expr stack = printStr(show temp++"\n")>>callEval(fst temp) (snd temp)
-    where temp = eval expr stack 
+    where temp = step expr stack 
     
 
 doubleElinFunc x 0 = []
 doubleElinFunc x n = x:doubleElinFunc x (n-1)
 
 
-eval :: [Command]->List->([Command], List)
-eval [] stack = ([], stack)
-eval (PUSH_NONE:y) stack = eval y (Cons None stack)
-eval (EVAL (Str s):xs) stack = (xs, (Cons (Str s) stack))
-eval (EVAL (Num x):xs) stack  =  ( xs, (Cons (Num x) stack))
-eval (EVAL (Cons (Str "list") xs):y) stack = eval ((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y) stack
-eval (EVAL (Cons x xy):xs ) stack = (((appendToExprWithEval (Cons x xy))++[APPLY]++xs), stack) 
-eval (APPLY:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) = (y, (Cons (Num(x + s)) xc))
-eval (CONS:y) (Cons x1 (Cons x2 xs)) = eval y  (Cons(Cons x1 x2) xs)
+step :: [Command]->List->([Command], List)
+step [] stack = ([], stack)
+step (PUSH_NONE:y) stack =  (y, (Cons None stack))
+step (EVAL (Str s):xs) stack = (xs, (Cons (Str s) stack))
+step (EVAL (Num x):xs) stack  =  ( xs, (Cons (Num x) stack))
+step (EVAL (Cons (Str "list") xs):y) stack = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack)
+step (EVAL (Cons (Str "if")( Cons cond (Cons branch1 (Cons branch2 None)))):expr) stack = ((EVAL cond:SWITCH:expr) , ((Cons branch1(Cons branch2 stack))))
+step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) = ((EVAL branch1):expr, endingStack)
+step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) = ((EVAL branch2):expr, endingStack)
+step (EVAL (Cons(Str "null")(Cons xs None)):expr) stack = 
+step (EVAL (Cons x xy):xs ) stack = (((appendToExprWithEval (Cons x xy))++[APPLY]++xs), stack) 
+step (APPLY:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) = (y, (Cons (Num(x + s)) xc))
+step (CONS:y) (Cons x1 (Cons x2 xs)) = (y,  (Cons(Cons x2 x1) xs))
 
 
+printStr "" =  return()
+printStr (x:xs) = putChar x >>  printStr xs
 
---TODO переименовать  eval в step 
+-- (null (list)) -> true
+-- EVAL (null x)
+-- EVAL null EVAL x APPLY1
+
+-- APPLY1
+-- null x
+
+-- ad hoc -- для частного случая
+
+-- TODO применить конечный автомат в польский калькудятор 
+-- mental note. Why dont we put in stack
+
+
+-- (if усл ветка1 ветка2)
+-- EVAL усл SWITCH
+-- stack: ветка1 ветка2
+
+
+-- SWITCH
+-- stack: true ветка1 ветка2
+
+-- EVAL ветка1
+--
+
+
 -- EVAL (list (+ 1 2) (* 3 4) 3)
 --commands: EVAL (+ 1 2) EVAL (* 3 4) EVAL 3 NONE CONS CONS CONS
 --COMMANDS: PUSH_NONE EVAL (+ 1 2) CONS EVAL (* 3 4) CONS EVAL 3 CONS
@@ -145,10 +175,6 @@ eval (CONS:y) (Cons x1 (Cons x2 xs)) = eval y  (Cons(Cons x1 x2) xs)
 --stack: 3 12 (3)
 --stack: 3 (12 3)
 --stack: (3 12 3)  
-
-printStr "" =  return()
-printStr (x:xs) = putChar x >>  printStr xs
-
 -- ((ф и) a)
 --qsort (x:xs) = qsort [y | y <- xs, y <= x] ++ x: qsort [y | y <- xs, y > x]  
 
