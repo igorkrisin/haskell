@@ -117,8 +117,8 @@ appendToExprWithEval None = []
 appendToExprWithEval (Cons x xs) =  (EVAL x): appendToExprWithEval xs
 
 callEval [] stack alist = return()
-callEval expr stack alist = printStr(show temp++"\n")>>callEval(fst temp) (snd temp) alist
-    where temp = step expr stack alist
+callEval expr stack alist = (printStr ("expr: "++show (printExpr expr')++"\n"))>> (printStr ("Stack: "++lstToStr stack'++"\n"))>> (printStr("alist: "++show alist'++"\n"))>>callEval expr' stack' alist'
+    where (expr', stack', alist')   = step expr stack alist
     
 
 doubleElinFunc x 0 = []
@@ -132,38 +132,56 @@ assocBool keyFind ((key,value):xs) = if keyFind == key then True else assocBool 
 assocBool keyFind [] = False 
 
 --pairlis ["a","b","c"] [1,2,3] -> [("a",1),("b",2),("c",3)]--все списки Cons
+--Cons(Cons "a")
 
-pairList None None = None
-pairList (Cons (Str x) xs) (Cons (Num y)ys) =  (Cons (Str x)(Cons (Num y)(pairList xs ys)))
+pairList None None = []
+pairList (Cons (Str x) xs) (Cons  y ys) =  (x,y):(pairList xs ys)
 
-step :: [Command]->List->[([Char],List)]->([Command], List) 
-step [] stack alist = ([], stack)
-step (PUSH_NONE:y) stack alist =  (y, (Cons None stack))
-step (EVAL (Cons (Cons (Str "lambda")(Cons xs ys)) var):endingExpr) stack alist =(((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++endingExpr), ((Cons xs)(Cons  var stack)))  
-step (EVAL (Str s):xs) stack alist = (xs, (if assocBool s alist then  (Cons (assoc s alist) stack) else Cons (Str s) stack))
-step (EVAL (Num x):xs) stack  alist=  ( xs, (Cons (Num x) stack))
-step (EVAL (Cons (Str "list") xs):y) stack alist = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack)
-step (EVAL (Cons (Str "if")( Cons cond (Cons branch1 (Cons branch2 None)))):expr) stack alist= ((EVAL cond:SWITCH:expr) , ((Cons branch1(Cons branch2 stack))))
-step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) alist= ((EVAL branch1):expr, endingStack)
-step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) alist = ((EVAL branch2):expr, endingStack)
-step (EVAL (Cons(Str string)(Cons xs None)):expr) stack alist= (((EVAL (Str string)):(EVAL xs):APPLY1:expr), stack)--описаны сразу 2 шаблона для null and zerop
-step (EVAL (Cons x xy):xs ) stack alist = (((appendToExprWithEval (Cons x xy))++[APPLY2]++xs), stack)
---step (APPLY_LAMBDA:expr) ((Cons (Cons xs ys))(Cons var endingStack)) alist = (expr, (Cons  
-step (APPLY1:expr) (Cons None (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "true") endingStack)) 
-step (APPLY1:expr) (Cons xs (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "false") endingStack))
-step (APPLY1:expr) (Cons (Num 0) (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "true") endingStack)) 
-step (APPLY1:expr) (Cons xs (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "false") endingStack))
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) alist = (y, (Cons (Num(x + s)) xc))
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "*") xc))) alist = (y, (Cons (Num(x * s)) xc))
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "/") xc))) alist = (y, (Cons (Num(x `div` s)) xc))
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "-") xc))) alist = (y, (Cons (Num(x - s)) xc))
-step (CONS:y) (Cons x1 (Cons x2 xs)) alist = (y,  (Cons(Cons x2 x1) xs))
+step :: [Command]->List->[([Char],List)]->([Command], List,[([Char],List)]) 
+step [] stack alist = ([], stack, alist)
+step (PUSH_NONE:y) stack alist =  (y, (Cons None stack), alist)
+step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg bodyFunc)) actualArg):endingExpr) stack alist =(((appendToExprWithEval bodyFunc)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList bodyFunc))++[APPLY_LAMBDA]++endingExpr), (Cons actualArg(Cons bodyFunc(Cons actualArg stack))), alist)
+step (EVAL (Str s):xs) stack alist = (xs, (if assocBool s alist then  (Cons (assoc s alist) stack) else Cons (Str s) stack), alist)
+step (EVAL (Num x):xs) stack  alist=  ( xs, (Cons (Num x) stack), alist)
+step (EVAL (Cons (Str "list") xs):y) stack alist = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack, alist)
+step (EVAL (Cons (Str "if")( Cons cond (Cons branch1 (Cons branch2 None)))):expr) stack alist= ((EVAL cond:SWITCH:expr) , ((Cons branch1(Cons branch2 stack))), alist)
+step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) alist= ((EVAL branch1):expr, endingStack, alist)
+step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) alist = ((EVAL branch2):expr, endingStack, alist)
+step (EVAL (Cons(Str string)(Cons xs None)):expr) stack alist = (((EVAL (Str string)):(EVAL xs):APPLY1:expr), stack, alist)--описаны сразу 2 шаблона для null and zerop
+step (EVAL (Cons x xy):xs ) stack alist = (((appendToExprWithEval (Cons x xy))++[APPLY2]++xs), stack, alist)
+step (APPLY_LAMBDA:expr) (Cons formalArg (Cons actualArg endingStack)) alist = ((trace ("actual: " ++ show actualArg++" formal: "++show formalArg) $ EVAL  actualArg):expr, endingStack ,( pairList formalArg actualArg))
+step (APPLY1:expr) (Cons None (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "true") endingStack), alist) 
+step (APPLY1:expr) (Cons xs (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "false") endingStack), alist)
+step (APPLY1:expr) (Cons (Num 0) (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "true") endingStack), alist) 
+step (APPLY1:expr) (Cons xs (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "false") endingStack), alist)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) alist = (y, (Cons (Num(x + s)) xc), alist)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "*") xc))) alist = (y, (Cons (Num(x * s)) xc), alist)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "/") xc))) alist = (y, (Cons (Num(x `div` s)) xc), alist)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "-") xc))) alist = (y, (Cons (Num(x - s)) xc), alist)
+step (CONS:y) (Cons x1 (Cons x2 xs)) alist = (y,  (Cons(Cons x2 x1) xs), alist)
+
+
+--([EVAL (Cons (Cons (Str "*") (Cons (Str "x") (Cons (Str "y") None))) None)],Cons (Cons (Str "x") (Cons (Str "y") None)) (Cons (Cons (Num 2) (Cons (Num 3) None)) None),*** Exception: lisp.hs:(137,1)-(138,65): Non-exhaustive patterns in function pairList
+
+printExpr ::[Command]->[Char]
+printExpr [] = ""
+printExpr (PUSH_NONE:remains) = " PUSH_NONE "++(printExpr remains)
+printExpr ((EVAL arg):remains) = (" EVAL "++lstToStr arg)++(printExpr remains)
+printExpr (SWITCH:remains) = " SWITCH "++(printExpr remains)
+printExpr (APPLY1:remains) = " APPLY1 "++(printExpr remains)
+printExpr (APPLY2:remains) = " APPLY2 "++(printExpr remains)
+printExpr (APPLY_LAMBDA:remains) = " APPLY_LAMBDA "++(printExpr remains)
+printExpr (CONS:remains) = " CONS "++(printExpr remains)
+
+
 
 
 printStr "" =  return()
 printStr (x:xs) = putChar x >>  printStr xs
 
-
+--1. пропадает * x y его нужно положить на стек, что бы потом APPLY_LAMBDA сняло его со стека
+--2.   не хватает каманды APPLY_LAMBDA
+--3. порядок значений после вычисления 143 я line и пропистать его в APPLY_LAMBDA
 --pairlis ["a","b","c"] [1,2,3] -> [("a",1),("b",2),("c",3)]--все списки Cons
 
 -- ((lambda (x y) (+ x y)) 1 2)
