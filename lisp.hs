@@ -133,14 +133,14 @@ assocBool keyFind [] = False
 
 --pairlis ["a","b","c"] [1,2,3] -> [("a",1),("b",2),("c",3)]--все списки Cons
 --Cons(Cons "a")
-
-pairList None None = []
-pairList (Cons (Str x) xs) (Cons  y ys) =  (x,y):(pairList xs ys)
+pairList :: List->List->[([Char],List)]->[([Char],List)]
+pairList None None ascLst = ascLst
+pairList (Cons (Str x) xs) (Cons  y ys) ascLst  =  (x,y):(pairList xs ys ascLst)
 
 step :: [Command]->List->[([Char],List)]->([Command], List,[([Char],List)]) 
 step [] stack alist = ([], stack, alist)
-step (PUSH_NONE:y) stack alist =  (y, (Cons None stack), alist)
-step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg bodyFunc)) actualArg):endingExpr) stack alist =(((appendToExprWithEval bodyFunc)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList bodyFunc))++[APPLY_LAMBDA]++endingExpr), (Cons actualArg(Cons bodyFunc(Cons actualArg stack))), alist)
+step (PUSH_NONE:y) stack alist =  (y, (Cons None stack), alist)         --actualArg - it (2+3); bodyFunc - it (* x y)
+step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) actualArg):endingExpr) stack alist = (((appendToExprWithEval actualArg)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList actualArg))++[APPLY_LAMBDA]++endingExpr),(Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) stack), alist)
 step (EVAL (Str s):xs) stack alist = (xs, (if assocBool s alist then  (Cons (assoc s alist) stack) else Cons (Str s) stack), alist)
 step (EVAL (Num x):xs) stack  alist=  ( xs, (Cons (Num x) stack), alist)
 step (EVAL (Cons (Str "list") xs):y) stack alist = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack, alist)
@@ -149,17 +149,29 @@ step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) 
 step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) alist = ((EVAL branch2):expr, endingStack, alist)
 step (EVAL (Cons(Str string)(Cons xs None)):expr) stack alist = (((EVAL (Str string)):(EVAL xs):APPLY1:expr), stack, alist)--описаны сразу 2 шаблона для null and zerop
 step (EVAL (Cons x xy):xs ) stack alist = (((appendToExprWithEval (Cons x xy))++[APPLY2]++xs), stack, alist)
-step (APPLY_LAMBDA:expr) (Cons formalArg (Cons actualArg endingStack)) alist = ((trace ("actual: " ++ show actualArg++" formal: "++show formalArg) $ EVAL  actualArg):expr, endingStack ,( pairList formalArg actualArg))
+step (APPLY_LAMBDA:expr)(Cons actualArg (Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) endingStack)) alist = ((EVAL bodyFunc):expr, endingStack ,(pairList formalArg actualArg alist))
 step (APPLY1:expr) (Cons None (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "true") endingStack), alist) 
 step (APPLY1:expr) (Cons xs (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "false") endingStack), alist)
 step (APPLY1:expr) (Cons (Num 0) (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "true") endingStack), alist) 
 step (APPLY1:expr) (Cons xs (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "false") endingStack), alist)
+step (APPLY1:expr) (Cons (Cons x xs)(Cons (Str "car") endingStack)) alist = (expr, (Cons x endingStack), alist)
+step (APPLY1:expr) (Cons (Cons x xs)(Cons (Str "cdr") endingStack)) alist = (expr, (Cons xs endingStack), alist)
 step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) alist = (y, (Cons (Num(x + s)) xc), alist)
 step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "*") xc))) alist = (y, (Cons (Num(x * s)) xc), alist)
 step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "/") xc))) alist = (y, (Cons (Num(x `div` s)) xc), alist)
 step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "-") xc))) alist = (y, (Cons (Num(x - s)) xc), alist)
 step (CONS:y) (Cons x1 (Cons x2 xs)) alist = (y,  (Cons(Cons x2 x1) xs), alist)
 
+--TODO написать car и  cudr  и подумать какие команды понадобятся для выполнения  cond
+--(cond ((a b) (c d) (e f)) = (if a b (if c d (if e f))
+
+--EVAL CONS)
+
+--(1 2 3)
+--(cons 1 (cons 2 (cons 3)))
+--(cons 1 (cons (cons 2 (cons 3 npne))))
+
+--step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg bodyFunc)) actualArg):endingExpr) stack alist =(((appendToExprWithEval bodyFunc)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList bodyFunc))++[APPLY_LAMBDA]++endingExpr), (Cons actualArg(Cons bodyFunc(Cons actualArg stack))), alist)
 
 --([EVAL (Cons (Cons (Str "*") (Cons (Str "x") (Cons (Str "y") None))) None)],Cons (Cons (Str "x") (Cons (Str "y") None)) (Cons (Cons (Num 2) (Cons (Num 3) None)) None),*** Exception: lisp.hs:(137,1)-(138,65): Non-exhaustive patterns in function pairList
 
