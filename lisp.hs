@@ -1,6 +1,7 @@
 import Data.Char
 import Data.Int
 import Debug.Trace
+import Data.Time.Format.ISO8601 (yearFormat)
 
 fib :: Int -> Int
 fib 0 = 0
@@ -37,7 +38,9 @@ tokenize xs =   (fst temp):tokenize (snd temp)
     
     
 data List = Num Int| None | Cons List List|Str [Char]deriving Show
-data Command = EVAL List|APPLY2|APPLY1|CONS|PUSH_NONE|SWITCH|APPLY_LAMBDA deriving Show
+data Command = EVAL List|RET Int|APPLY2|APPLY1|CONS|PUSH_NONE|SWITCH|APPLY_LAMBDA deriving Show
+
+
 
 
 --392 = 3*10^2+9*10^1+2*10^0
@@ -48,8 +51,11 @@ data Command = EVAL List|APPLY2|APPLY1|CONS|PUSH_NONE|SWITCH|APPLY_LAMBDA derivi
 --3%10 = 3
 --3/10 = 0
 
+zeroToStr 0 [] = ['0']
+zeroToStr x temp = intToStr x temp
 
 
+intToStr :: Int -> [Char] -> [Char]
 intToStr 0 x = x
 intToStr n temp = intToStr (n`div`10) ((chr (n`mod`10+48)):temp)
 
@@ -59,7 +65,7 @@ consToStr (Cons x xs) = (lstToStr x)++ " " ++ (consToStr xs)
 
 lstToStr None = ""
 lstToStr (Cons xs xy) = "("++consToStr(Cons xs xy)++")"
-lstToStr (Num n) = (intToStr n "")
+lstToStr (Num n) = (zeroToStr n "")
 lstToStr (Str s) = s
 
 
@@ -116,9 +122,13 @@ appendToExprWithEval :: List->[Command]
 appendToExprWithEval None = []
 appendToExprWithEval (Cons x xs) =  (EVAL x): appendToExprWithEval xs
 
-callEval [] stack alist = return()
-callEval expr stack alist = (printStr ("expr: "++show (printExpr expr')++"\n"))>> (printStr ("Stack: "++lstToStr stack'++"\n"))>> (printStr("alist: "++show alist'++"\n"))>>callEval expr' stack' alist'
-    where (expr', stack', alist')   = step expr stack alist
+callEval [] stack alist globalVar = return()
+callEval expr stack alist globalVar = (printStr ("expr: "++show (printExpr expr')++"\n"))>>
+  (printStr ("Stack: "++lstToStr stack'++"\n"))>>  
+  (printStr("alist: "++(printAlist alist')++"\n"))>>  
+  (printStr("globalVar: "++(printAlist globalVar')++"\n"))>>
+  callEval expr' stack' alist' globalVar'
+  where (expr', stack', alist', globalVar') = step expr stack alist globalVar
     
 
 doubleElinFunc x 0 = []
@@ -129,40 +139,55 @@ assoc keyFind ((key,value):xs) = if keyFind == key then value else assoc keyFind
  
 assocBool :: [Char]->[([Char], List)]->Bool
 assocBool keyFind ((key,value):xs) = if keyFind == key then True else assocBool keyFind xs
-assocBool keyFind [] = False 
+assocBool keyFind [] = False
 
 --pairlis ["a","b","c"] [1,2,3] -> [("a",1),("b",2),("c",3)]--все списки Cons
 --Cons(Cons "a")
+
+printAlist [] = ""
+printAlist ((key,value):xs) = (key++" "++(lstToStr value)++", ")++printAlist xs
+
+drop' 0 xs = xs
+drop' num (x:xs) = drop' (num - 1) xs
+
+
 pairList :: List->List->[([Char],List)]->[([Char],List)]
 pairList None None ascLst = ascLst
 pairList (Cons (Str x) xs) (Cons  y ys) ascLst  =  (x,y):(pairList xs ys ascLst)
 
-step :: [Command]->List->[([Char],List)]->([Command], List,[([Char],List)]) 
-step [] stack alist = ([], stack, alist)
-step (PUSH_NONE:y) stack alist =  (y, (Cons None stack), alist)         --actualArg - it (2+3); bodyFunc - it (* x y)
-step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) actualArg):endingExpr) stack alist = (((appendToExprWithEval actualArg)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList actualArg))++[APPLY_LAMBDA]++endingExpr),(Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) stack), alist)
-step (EVAL (Str s):xs) stack alist = (xs, (if assocBool s alist then  (Cons (assoc s alist) stack) else Cons (Str s) stack), alist)
-step (EVAL (Num x):xs) stack  alist=  ( xs, (Cons (Num x) stack), alist)
-step (EVAL (Cons (Str "list") xs):y) stack alist = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack, alist)
-step (EVAL (Cons (Str "if")( Cons cond (Cons branch1 (Cons branch2 None)))):expr) stack alist= ((EVAL cond:SWITCH:expr) , ((Cons branch1(Cons branch2 stack))), alist)
-step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) alist= ((EVAL branch1):expr, endingStack, alist)
-step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) alist = ((EVAL branch2):expr, endingStack, alist)
-step (EVAL (Cons(Str string)(Cons xs None)):expr) stack alist = (((EVAL (Str string)):(EVAL xs):APPLY1:expr), stack, alist)--описаны сразу 2 шаблона для null and zerop
-step (EVAL (Cons x xy):xs ) stack alist = (((appendToExprWithEval (Cons x xy))++[APPLY2]++xs), stack, alist)
-step (APPLY_LAMBDA:expr)(Cons actualArg (Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) endingStack)) alist = ((EVAL bodyFunc):expr, endingStack ,(pairList formalArg actualArg alist))
-step (APPLY1:expr) (Cons None (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "true") endingStack), alist) 
-step (APPLY1:expr) (Cons xs (Cons (Str "null") endingStack)) alist = (expr, (Cons (Str "false") endingStack), alist)
-step (APPLY1:expr) (Cons (Num 0) (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "true") endingStack), alist) 
-step (APPLY1:expr) (Cons xs (Cons (Str "zerop") endingStack)) alist = (expr, (Cons (Str "false") endingStack), alist)
-step (APPLY1:expr) (Cons (Cons x xs)(Cons (Str "car") endingStack)) alist = (expr, (Cons x endingStack), alist)
-step (APPLY1:expr) (Cons (Cons x xs)(Cons (Str "cdr") endingStack)) alist = (expr, (Cons xs endingStack), alist)
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) alist = (y, (Cons (Num(x + s)) xc), alist)
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "*") xc))) alist = (y, (Cons (Num(x * s)) xc), alist)
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "/") xc))) alist = (y, (Cons (Num(x `div` s)) xc), alist)
-step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "-") xc))) alist = (y, (Cons (Num(x - s)) xc), alist)
-step (CONS:y) (Cons x1 (Cons x2 xs)) alist = (y,  (Cons(Cons x2 x1) xs), alist)
+step :: [Command]->List->[([Char],List)]->[([Char], List)]->([Command], List,[([Char],List)], [([Char], List)])
+step [] stack alist globalVar = ([], stack, alist, globalVar)
+step (PUSH_NONE:y) stack alist globalVar =  (y, (Cons None stack), alist, globalVar)         --actualArg - it (2+3); bodyFunc - it (* x y)
+step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) actualArg):endingExpr) stack alist globalVar = (((appendToExprWithEval actualArg)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList actualArg))++[APPLY_LAMBDA]++endingExpr),(Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) stack), alist, globalVar)
+step (EVAL (Str s):xs) stack alist globalVar|assocBool s globalVar = trace("GLOBAL VAR = " ++ show globalVar)(xs, (Cons (assoc s globalVar) stack), alist, globalVar)
+step (EVAL (Str s):xs) stack alist globalVar = (xs, (if assocBool s alist then  (Cons (assoc s alist) stack) else Cons (Str s) stack), alist, globalVar)
+step (EVAL (Num x):xs) stack  alist globalVar =  ( xs, (Cons (Num x) stack), alist, globalVar)
+step (EVAL (Cons (Str "list") xs):y) stack alist globalVar = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack, alist, globalVar)
+step (EVAL (Cons (Str "if")( Cons cond (Cons branch1 (Cons branch2 None)))):expr) stack alist globalVar= ((EVAL cond:SWITCH:expr) , ((Cons branch1(Cons branch2 stack))), alist, globalVar)
+step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) alist globalVar= ((EVAL branch1):expr, endingStack, alist, globalVar)
+step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) alist globalVar = ((EVAL branch2):expr, endingStack, alist, globalVar)
+step (EVAL (Cons(Str string)(Cons xs None)):expr) stack alist globalVar = (((EVAL (Str string)):(EVAL xs):APPLY1:expr), stack, alist, globalVar)--описаны сразу 2 шаблона для null and zerop
+step (EVAL (Cons x xy):xs ) stack alist globalVar = (((appendToExprWithEval (Cons x xy))++[APPLY2]++xs), stack, alist, globalVar)
+step (APPLY_LAMBDA:expr)(Cons actualArg (Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) endingStack)) alist globalVar = ((EVAL bodyFunc):(RET(lenghtList actualArg)):expr, endingStack ,(pairList formalArg actualArg alist), globalVar)
+step (APPLY1:expr) (Cons None (Cons (Str "null") endingStack)) alist globalVar = (expr, (Cons (Str "true") endingStack), alist, globalVar)
+step (RET num:expr)  stack alist globalVar = (expr, stack, (drop' num alist), globalVar)
+step (APPLY1:expr) (Cons xs (Cons (Str "null") endingStack)) alist globalVar = (expr, (Cons (Str "false") endingStack), alist, globalVar)
+step (APPLY1:expr) (Cons (Num 0) (Cons (Str "zerop") endingStack)) alist globalVar = (expr, (Cons (Str "true") endingStack), alist, globalVar) 
+step (APPLY1:expr) (Cons xs (Cons (Str "zerop") endingStack)) alist globalVar = (expr, (Cons (Str "false") endingStack), alist, globalVar)
+step (APPLY1:expr) (Cons (Cons x xs)(Cons (Str "car") endingStack)) alist globalVar = (expr, (Cons x endingStack), alist, globalVar)
+step (APPLY1:expr) (Cons (Cons x xs)(Cons (Str "cdr") endingStack)) alist globalVar = (expr, (Cons xs endingStack), alist, globalVar)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "+") xc))) alist globalVar = (y, (Cons (Num(x + s)) xc), alist, globalVar)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "*") xc))) alist globalVar = (y, (Cons (Num(x * s)) xc), alist, globalVar)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "/") xc))) alist globalVar = (y, (Cons (Num(x `div` s)) xc), alist, globalVar)
+step (APPLY2:y) (Cons (Num s) (Cons (Num x) (Cons (Str "-") xc))) alist globalVar = (y, (Cons (Num(x - s)) xc), alist, globalVar)
+step (CONS:y) (Cons x1 (Cons x2 xs)) alist globalVar = (y,  (Cons(Cons x2 x1) xs), alist, globalVar)
 
---TODO написать car и  cudr  и подумать какие команды понадобятся для выполнения  cond
+
+check x y| x==True  =trace("CHECK = " ++ show x) x
+
+--(+ ((lambda (x) x) 3) x)
+
+--TODO написать car и  cudr  и подумать какие команды понадобятся для выполнения  cond - APPLY2 and EVAL
 --(cond ((a b) (c d) (e f)) = (if a b (if c d (if e f))
 
 --EVAL CONS)
@@ -184,6 +209,7 @@ printExpr (APPLY1:remains) = " APPLY1 "++(printExpr remains)
 printExpr (APPLY2:remains) = " APPLY2 "++(printExpr remains)
 printExpr (APPLY_LAMBDA:remains) = " APPLY_LAMBDA "++(printExpr remains)
 printExpr (CONS:remains) = " CONS "++(printExpr remains)
+printExpr ((RET arg):remains) = " RET"++(printExpr remains)
 
 
 
