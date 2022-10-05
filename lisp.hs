@@ -38,7 +38,7 @@ tokenize xs =   (fst temp):tokenize (snd temp)
     
     
 data List = Num Int| None | Cons List List|Str [Char]deriving Show
-data Command = EVAL List|RET Int|APPLY2|APPLY1|CONS|PUSH_NONE|SWITCH|APPLY_LAMBDA deriving Show
+data Command = EVAL List|DROP|RET Int|APPLY2|APPLY1|CONS|PUSH_NONE|SWITCH|APPLY_LAMBDA deriving Show
 
 
 
@@ -155,6 +155,11 @@ pairList :: List->List->[([Char],List)]->[([Char],List)]
 pairList None None ascLst = ascLst
 pairList (Cons (Str x) xs) (Cons  y ys) ascLst  =  (x,y):(pairList xs ys ascLst)
 
+appendToExprWithEvalDrop :: List->[Command]
+appendToExprWithEvalDrop None = []
+appendToExprWithEvalDrop (Cons x None)  = [EVAL x]
+appendToExprWithEvalDrop (Cons x xs) = (EVAL x):DROP: appendToExprWithEvalDrop xs
+
 step :: [Command]->List->[([Char],List)]->[([Char], List)]->([Command], List,[([Char],List)], [([Char], List)])
 step [] stack alist globalVar = ([], stack, alist, globalVar)
 step (PUSH_NONE:y) stack alist globalVar =  (y, (Cons None stack), alist, globalVar)         --actualArg - it (2+3); bodyFunc - it (* x y)
@@ -163,11 +168,15 @@ step (EVAL (Str s):xs) stack alist globalVar|assocBool s globalVar = trace("GLOB
 step (EVAL (Str s):xs) stack alist globalVar = (xs, (if assocBool s alist then  (Cons (assoc s alist) stack) else Cons (Str s) stack), alist, globalVar)
 step (EVAL (Num x):xs) stack  alist globalVar =  ( xs, (Cons (Num x) stack), alist, globalVar)
 step (EVAL (Cons (Str "list") xs):y) stack alist globalVar = (((appendToExprWithEval xs)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList xs))++y),stack, alist, globalVar)
+step (EVAL (Cons (Str "progn") xs):y) stack alist globalVar = ((appendToExprWithEvalDrop xs)++y, stack, alist, globalVar)
+step (EVAL (Cons (Str "define")(Cons  (Str var) (Cons value None))):y) stack alist globalVar = (y, (Cons (Str var) stack), alist, (var, value):globalVar)
+step (EVAL (Cons (Str var) (Cons value None)):y) stack alist globalVar|assocBool var globalVar = ((EVAL(Cons (assoc var globalVar) (Cons value None)):y), stack, alist, globalVar)
 step (EVAL (Cons (Str "if")( Cons cond (Cons branch1 (Cons branch2 None)))):expr) stack alist globalVar= ((EVAL cond:SWITCH:expr) , ((Cons branch1(Cons branch2 stack))), alist, globalVar)
 step (SWITCH:expr)  (Cons (Str "true")(Cons branch1(Cons branch2 endingStack))) alist globalVar= ((EVAL branch1):expr, endingStack, alist, globalVar)
 step (SWITCH:expr)  (Cons (Str "false")(Cons branch1(Cons branch2 endingStack))) alist globalVar = ((EVAL branch2):expr, endingStack, alist, globalVar)
 step (EVAL (Cons(Str string)(Cons xs None)):expr) stack alist globalVar = (((EVAL (Str string)):(EVAL xs):APPLY1:expr), stack, alist, globalVar)--описаны сразу 2 шаблона для null and zerop
 step (EVAL (Cons x xy):xs ) stack alist globalVar = (((appendToExprWithEval (Cons x xy))++[APPLY2]++xs), stack, alist, globalVar)
+step (DROP:expr) (Cons topStack remainsStack) alist globalVar = (expr, remainsStack, alist, globalVar)
 step (APPLY_LAMBDA:expr)(Cons actualArg (Cons(Cons (Str "lambda")(Cons formalArg (Cons bodyFunc None))) endingStack)) alist globalVar = ((EVAL bodyFunc):(RET(lenghtList actualArg)):expr, endingStack ,(pairList formalArg actualArg alist), globalVar)
 step (APPLY1:expr) (Cons None (Cons (Str "null") endingStack)) alist globalVar = (expr, (Cons (Str "true") endingStack), alist, globalVar)
 step (RET num:expr)  stack alist globalVar = (expr, stack, (drop' num alist), globalVar)
@@ -187,6 +196,8 @@ check x y| x==True  =trace("CHECK = " ++ show x) x
 
 --(+ ((lambda (x) x) 3) x)
 
+--берем переменную и значение и их клаlем в globalVar
+
 --TODO написать car и  cudr  и подумать какие команды понадобятся для выполнения  cond - APPLY2 and EVAL
 --(cond ((a b) (c d) (e f)) = (if a b (if c d (if e f))
 
@@ -199,6 +210,8 @@ check x y| x==True  =trace("CHECK = " ++ show x) x
 --step (EVAL (Cons (Cons (Str "lambda")(Cons formalArg bodyFunc)) actualArg):endingExpr) stack alist =(((appendToExprWithEval bodyFunc)++[PUSH_NONE]++(doubleElinFunc CONS (lenghtList bodyFunc))++[APPLY_LAMBDA]++endingExpr), (Cons actualArg(Cons bodyFunc(Cons actualArg stack))), alist)
 
 --([EVAL (Cons (Cons (Str "*") (Cons (Str "x") (Cons (Str "y") None))) None)],Cons (Cons (Str "x") (Cons (Str "y") None)) (Cons (Cons (Num 2) (Cons (Num 3) None)) None),*** Exception: lisp.hs:(137,1)-(138,65): Non-exhaustive patterns in function pairList
+-- (progn (+ 5 1) (print 2) (print 3))
+-- (progn (define f (lambda (x) (+ 1 x))) (f 3)) -> 4
 
 printExpr ::[Command]->[Char]
 printExpr [] = ""
@@ -210,6 +223,7 @@ printExpr (APPLY2:remains) = " APPLY2 "++(printExpr remains)
 printExpr (APPLY_LAMBDA:remains) = " APPLY_LAMBDA "++(printExpr remains)
 printExpr (CONS:remains) = " CONS "++(printExpr remains)
 printExpr ((RET arg):remains) = " RET"++(printExpr remains)
+printExpr (DROP:remains) = " DROP"++(printExpr remains)
 
 
 
@@ -217,6 +231,11 @@ printExpr ((RET arg):remains) = " RET"++(printExpr remains)
 printStr "" =  return()
 printStr (x:xs) = putChar x >>  printStr xs
 
+
+var = callEval [EVAL (parse (tokenize "(progn (define lenghtList (lambda (lst) (if (null lst) 0 (+(lenghtList (cdr lst))1)))) (lenghtList (list 3 3)))" ) None)] None [("a", (Cons (Num 42) None))][("x",(Num 3)), ("d", (Num 4))]  
+
+
+--TODO читать портянку, пока не дойдет как работает стековая машина
 --1. пропадает * x y его нужно положить на стек, что бы потом APPLY_LAMBDA сняло его со стека
 --2.   не хватает каманды APPLY_LAMBDA
 --3. порядок значений после вычисления 143 я line и пропистать его в APPLY_LAMBDA
